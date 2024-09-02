@@ -49,7 +49,7 @@ atlas_ctr_vios = pd.read_csv('ctr_sol_violators.csv', names=['id'])
 all_vios = set()
 all_vios = set(atlas_ctr_vios['id']).union(ark_soi_vio['id'])
 
-with open('violating_ripe_probes/probe_ids.txt', 'w') as f:
+with open('probe_ids.txt', 'w') as f:
     for i in all_vios:
         f.write(str(i))
         f.write('\n')
