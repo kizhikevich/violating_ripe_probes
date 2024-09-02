@@ -1,6 +1,6 @@
 # RIPE Atlas Probes with Potentially Incorrect Reported Geolocation
 
-This repo contains weekly-updated lists of RIPE Atlas Probe IDs that likely have incorrect reported geolocation. Users may want to avoid using these probes for scheduling measurements or as measurement targets.
+This repo contains weekly-updated lists of RIPE Atlas Probe IDs that likely have incorrect reported geolocation. Users may want to avoid using these probes for scheduling measurements or **as measurement targets**.
 
 This repo also contains the execution pipeline that produces a list of violating RIPE Atlas Probe IDs.
 
