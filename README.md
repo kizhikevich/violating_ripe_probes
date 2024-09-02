@@ -13,3 +13,5 @@ The folder `atlas_pipeline` contains the code.
 You will need to install the [CAIDA Scamper Tool](https://www.caida.org/catalog/software/scamper/) and its python packages to run the code.
 
 In `run_atlas_pipeline.sh`, you will need to provide your directory containing Ark metadata at this line: `python3 bulkpinger.py --mode probe --scampers [YOUR DIRECTORY HERE] --targets  atlas_ips.txt`
+
+The final output is `probe_ids.txt`
