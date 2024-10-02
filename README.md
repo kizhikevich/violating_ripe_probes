@@ -1,5 +1,7 @@
 # RIPE Atlas Probes with Potentially Incorrect Reported Geolocation
 
+This repo contains supplementary data for the paper [Trust, But Verify, Operator-Reported Geolocation](https://arxiv.org/pdf/2409.19109)
+
 This repo contains biweekly-updated (on the 1st and 15th of the month) lists of RIPE Atlas Probe IDs that likely have incorrect reported geolocation. Users may want to avoid using these probes for scheduling measurements or **as measurement targets**.
 
 This repo also contains the execution pipeline that produces a list of violating RIPE Atlas Probe IDs.
