@@ -4,6 +4,8 @@ This repo contains supplementary data for the paper [Trust, But Verify, Operator
 
 This repo contains biweekly-updated (on the 1st and 15th of the month) lists of RIPE Atlas Probe IDs that likely have incorrect reported geolocation. Users may want to avoid using these probes for scheduling measurements or **as measurement targets**.
 
+If the Ark measurement platform is experiencing increased latency during a particular measurement campaign due to higher load or other reasons, it may detect fewer probes with incorrect reported geolocation.
+
 This repo also contains the execution pipeline that produces a list of violating RIPE Atlas Probe IDs.
 
 ## Running the execution pipeline yourself
