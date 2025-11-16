@@ -13,6 +13,7 @@ probe_id,violates_ark,violates_rootdns
 6414,True,True
 6420,True,True
 6428,False,True
+6436,True,False
 6439,True,True
 6485,False,True
 6493,False,True
@@ -30,9 +31,8 @@ probe_id,violates_ark,violates_rootdns
 7124,False,True
 7254,True,False
 7264,True,False
-7269,True,False
+7269,True,True
 7280,False,True
-7306,True,False
 7308,False,True
 7326,False,True
 7358,True,False
@@ -43,7 +43,6 @@ probe_id,violates_ark,violates_rootdns
 7546,True,True
 7577,False,True
 7578,False,True
-7582,True,False
 7606,True,True
 7624,False,True
 7634,False,True
@@ -52,6 +51,7 @@ probe_id,violates_ark,violates_rootdns
 10507,True,True
 11518,False,True
 11967,False,True
+12303,False,True
 12541,True,False
 12598,True,False
 13541,True,False
@@ -76,14 +76,16 @@ probe_id,violates_ark,violates_rootdns
 20731,True,True
 20733,False,True
 22557,False,True
+22698,False,True
 23236,False,True
 24520,False,True
+25035,False,True
 25047,False,True
 25086,True,False
 28673,False,True
 28778,True,False
 29720,True,False
-31330,False,True
+31330,True,True
 33355,False,True
 33631,True,True
 33717,True,False
@@ -94,7 +96,6 @@ probe_id,violates_ark,violates_rootdns
 50094,False,True
 50197,False,True
 50216,False,True
-50345,False,True
 50468,False,True
 50525,True,True
 50539,True,False
@@ -112,7 +113,6 @@ probe_id,violates_ark,violates_rootdns
 52209,False,True
 52239,False,True
 52247,True,False
-52574,False,True
 52964,False,True
 53168,False,True
 53821,True,False
@@ -127,7 +127,6 @@ probe_id,violates_ark,violates_rootdns
 55453,False,True
 55521,True,False
 55804,True,False
-60109,False,True
 60388,False,True
 60575,True,False
 60649,True,False
@@ -153,13 +152,13 @@ probe_id,violates_ark,violates_rootdns
 1000017,False,True
 1000114,False,True
 1000662,False,True
-1000675,False,True
 1000808,False,True
 1000917,True,True
 1000963,True,False
 1001299,True,True
 1001389,True,True
 1001496,True,True
+1001864,False,True
 1001877,True,False
 1002071,False,True
 1002094,True,True
@@ -171,7 +170,6 @@ probe_id,violates_ark,violates_rootdns
 1003172,True,True
 1003400,False,True
 1003425,True,False
-1003608,False,True
 1003761,True,True
 1004015,True,False
 1004033,True,False
@@ -197,7 +195,6 @@ probe_id,violates_ark,violates_rootdns
 1005955,True,False
 1006016,True,True
 1006075,True,True
-1006165,True,False
 1006239,False,True
 1006261,True,False
 1006286,True,True
@@ -214,7 +211,7 @@ probe_id,violates_ark,violates_rootdns
 1006724,True,False
 1006743,False,True
 1007198,False,True
-1007293,True,False
+1007293,True,True
 1007384,True,False
 1007514,True,False
 1007582,True,False
@@ -225,9 +222,9 @@ probe_id,violates_ark,violates_rootdns
 1008126,False,True
 1008127,True,True
 1008146,True,True
-1008155,False,True
 1008163,True,True
 1008175,False,True
+1008194,True,False
 1008241,True,True
 1008404,True,True
 1008432,False,True
@@ -272,7 +269,6 @@ probe_id,violates_ark,violates_rootdns
 1010453,False,True
 1010461,False,True
 1010469,False,True
-1010479,True,False
 1010516,True,False
 1010517,True,False
 1010572,False,True
@@ -292,7 +288,7 @@ probe_id,violates_ark,violates_rootdns
 1010900,True,True
 1010939,True,False
 1010949,True,False
-1010961,True,True
+1010961,True,False
 1010994,True,False
 1011004,False,True
 1011062,True,True
@@ -326,7 +322,6 @@ probe_id,violates_ark,violates_rootdns
 1011598,True,False
 1011599,True,False
 1011618,True,True
-1011660,True,False
 1011711,True,False
 1011717,True,False
 1011845,True,True
@@ -342,7 +337,6 @@ probe_id,violates_ark,violates_rootdns
 1012123,True,True
 1012124,True,True
 1012129,True,True
-1012164,False,True
 1012168,True,True
 1012174,True,True
 1012194,True,True
@@ -396,7 +390,6 @@ probe_id,violates_ark,violates_rootdns
 1013112,True,False
 1013174,False,True
 1013188,False,True
-1013201,True,False
 1013215,True,False
 1013223,True,True
 1013234,False,True
