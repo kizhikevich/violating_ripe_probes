@@ -4,3 +4,4 @@ numpy
 requests
 ijson
 pyarrow
+pydeck
