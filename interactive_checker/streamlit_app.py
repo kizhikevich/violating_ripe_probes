@@ -507,25 +507,40 @@ if check:
                 ]
             )
 
-            arcs = root_points.copy()
-            arcs["probe_lat"] = float(probe_lat)
-            arcs["probe_lon"] = float(probe_lon)
-
             all_lats = [float(probe_lat)] + root_points["lat"].astype(float).tolist()
             all_lons = [float(probe_lon)] + root_points["lon"].astype(float).tolist()
+
+            lat_span = max(all_lats) - min(all_lats)
+            lon_span = max(all_lons) - min(all_lons)
+            span = max(lat_span, lon_span)
+
+            if span > 100:
+                zoom = 1
+            elif span > 50:
+                zoom = 2
+            elif span > 20:
+                zoom = 3
+            elif span > 8:
+                zoom = 4
+            elif span > 3:
+                zoom = 5
+            else:
+                zoom = 6
 
             view_state = pdk.ViewState(
                 latitude=sum(all_lats) / len(all_lats),
                 longitude=sum(all_lons) / len(all_lons),
-                zoom=1.2,
+                zoom=zoom,
             )
 
             probe_layer = pdk.Layer(
                 "ScatterplotLayer",
                 data=probe_point,
                 get_position="[lon, lat]",
-                get_radius=90000,
-                get_fill_color=[20, 90, 220, 220],
+                get_radius=50000,
+                radius_min_pixels=7,
+                radius_max_pixels=14,
+                get_fill_color=[37, 99, 235, 230],
                 pickable=True,
             )
 
@@ -533,32 +548,33 @@ if check:
                 "ScatterplotLayer",
                 data=root_points,
                 get_position="[lon, lat]",
-                get_radius=70000,
-                get_fill_color=[220, 60, 60, 220],
+                get_radius=50000,
+                radius_min_pixels=6,
+                radius_max_pixels=12,
+                get_fill_color=[239, 68, 68, 220],
                 pickable=True,
             )
 
-            arc_layer = pdk.Layer(
-                "ArcLayer",
-                data=arcs,
-                get_source_position="[probe_lon, probe_lat]",
-                get_target_position="[lon, lat]",
-                get_source_color=[20, 90, 220, 160],
-                get_target_color=[220, 60, 60, 160],
-                get_width=2,
-                pickable=False,
-            )
-
             st.subheader("Probe and violating root-instance locations")
-            st.caption(
-                "Blue marks the probe's reported location; red marks violating "
-                "root-server instances. Lines show the geographic relationship "
-                "used by the SOI distance check."
+            st.markdown(
+                """
+                <div style="display:flex; gap:24px; margin-bottom:8px;">
+                    <span>
+                        <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#2563eb;margin-right:6px;"></span>
+                        <b>Reported probe location</b>
+                    </span>
+                    <span>
+                        <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#ef4444;margin-right:6px;"></span>
+                        <b>Violating root-server instance</b>
+                    </span>
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
 
             st.pydeck_chart(
                 pdk.Deck(
-                    layers=[arc_layer, root_layer, probe_layer],
+                    layers=[root_layer, probe_layer],
                     initial_view_state=view_state,
                     tooltip={
                         "html": "<b>{label}{server_label}</b>",
