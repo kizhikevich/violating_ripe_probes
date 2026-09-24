@@ -1,0 +1,76 @@
+name: Update RIPE Atlas data
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+    - cron: "0 12 * * *"
+    - cron: "0 18 * * *"
+
+  workflow_dispatch:
+    inputs:
+      slot:
+        description: "Snapshot slot"
+        required: true
+        default: "18"
+        type: choice
+        options:
+          - "06"
+          - "12"
+          - "18"
+
+permissions:
+  contents: write
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        working-directory: interactive_checker
+        run: pip install -r requirements.txt
+
+      - name: Determine snapshot slot
+        id: slot
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            SLOT="${{ inputs.slot }}"
+          else
+            case "${{ github.event.schedule }}" in
+              "0 6 * * *") SLOT="06" ;;
+              "0 12 * * *") SLOT="12" ;;
+              "0 18 * * *") SLOT="18" ;;
+            esac
+          fi
+
+          echo "slot=$SLOT" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch RIPE Atlas snapshot
+        working-directory: interactive_checker
+        run: |
+          python fetch_data.py \
+            --slot "${{ steps.slot.outputs.slot }}" \
+            --root-locations root_locations.csv
+
+      - name: Commit updated data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add interactive_checker/data/
+
+          if git diff --cached --quiet; then
+            echo "No data changes"
+          else
+            git commit -m "Update RIPE Atlas snapshot ${{ steps.slot.outputs.slot }} UTC"
+            git push
+          fi
