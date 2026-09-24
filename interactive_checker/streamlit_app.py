@@ -565,7 +565,7 @@ if check:
                     </span>
                     <span>
                         <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#ef4444;margin-right:6px;"></span>
-                        <b>Violating root-server instance</b>
+                        <b>Root-server instance with improbable RTTs</b>
                     </span>
                 </div>
                 """,
