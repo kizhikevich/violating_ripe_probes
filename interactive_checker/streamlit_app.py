@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pandas as pd
+import pydeck as pdk
 import streamlit as st
 
 
@@ -115,12 +116,40 @@ def format_float(value, digits=1):
     return f"{value:,.{digits}f}"
 
 
+def format_snapshot_slots(value):
+    """Format stored snapshot slots as 06:00, 12:00, 18:00."""
+    if pd.isna(value):
+        return "—"
+
+    text = str(value).strip()
+    if not text:
+        return "—"
+
+    # Accept common stored forms such as "18", "06,12,18",
+    # "['06', '12', '18']", or "06 12 18".
+    import re
+    slots = re.findall(r"(?<!\d)(?:0?6|12|18)(?!\d)", text)
+
+    if not slots:
+        return text
+
+    normalized = []
+    for slot in slots:
+        hour = int(slot)
+        label = f"{hour:02d}:00"
+        if label not in normalized:
+            normalized.append(label)
+
+    return ", ".join(normalized)
+
+
 st.title("RIPE Atlas SOI Checker")
-st.caption(
+st.markdown(
     "Check whether a RIPE Atlas probe's reported location is inconsistent "
     "with latency to root-server instances. Daily results use the minimum "
     "RTT observed across the scheduled 06:00, 12:00, and 18:00 UTC snapshots "
-    "available for that day."
+    "available for that day. For more details about methodology, see our paper at "
+    "https://kizhikevich.github.io/assets/papers/ripe_paper.pdf."
 )
 
 all_dates = available_summary_dates()
@@ -241,11 +270,9 @@ if check:
     else:
         m3.metric("Roots observed", int(roots_observed))
 
-    slots = newest.get("snapshot_slots_loaded", "—")
-    if pd.isna(slots):
-        slots = "—"
-    else:
-        slots = str(slots).replace(",", ", ")
+    slots = format_snapshot_slots(
+        newest.get("snapshot_slots_loaded", "—")
+    )
     m4.metric("Latest day's snapshots", slots)
 
     metadata_bits = []
@@ -286,6 +313,11 @@ if check:
                     "snapshot_slots_loaded": "Snapshots used",
                 }
             )
+
+            if "Snapshots used" in daily_display.columns:
+                daily_display["Snapshots used"] = daily_display[
+                    "Snapshots used"
+                ].apply(format_snapshot_slots)
 
             st.dataframe(
                 daily_display,
@@ -371,10 +403,14 @@ if check:
     ]
     wanted = [column for column in wanted if column in table.columns]
 
-    table = table[wanted].sort_values(
-        [c for c in ["date", "violation_margin_km"] if c in wanted],
-        ascending=False,
-    )
+    table = table[wanted].copy()
+
+    # Alphabetize the embedded detail table by root letter. For multi-day
+    # windows, keep dates newest-first while sorting roots A-Z within a day.
+    sort_cols = [c for c in ["date", "root_letter"] if c in table.columns]
+    if sort_cols:
+        ascending = [False if c == "date" else True for c in sort_cols]
+        table = table.sort_values(sort_cols, ascending=ascending)
 
     table = table.rename(
         columns={
@@ -408,42 +444,130 @@ if check:
         hide_index=True,
     )
 
-    # Map the claimed probe location plus the violating root-instance locations.
-    map_rows = []
-
+    # Map the probe's reported location relative to violating root instances.
     probe_lat = newest.get("latitude")
     probe_lon = newest.get("longitude")
 
-    if pd.notna(probe_lat) and pd.notna(probe_lon):
-        map_rows.append(
-            {
-                "lat": float(probe_lat),
-                "lon": float(probe_lon),
-            }
-        )
+    if (
+        pd.notna(probe_lat)
+        and pd.notna(probe_lon)
+        and {"dns_lat", "dns_lon"}.issubset(details.columns)
+    ):
+        root_points = details.copy()
+        root_points = root_points.dropna(subset=["dns_lat", "dns_lon"])
 
-    if {"dns_lat", "dns_lon"}.issubset(details.columns):
-        root_points = (
-            details[["dns_lat", "dns_lon"]]
-            .dropna()
-            .drop_duplicates()
-        )
-
-        for _, row in root_points.iterrows():
-            map_rows.append(
-                {
-                    "lat": float(row["dns_lat"]),
-                    "lon": float(row["dns_lon"]),
-                }
+        if not root_points.empty:
+            root_points["root_letter_display"] = (
+                root_points["root_letter"].astype(str).str.upper()
             )
 
-    if map_rows:
-        st.subheader("Probe and violating root-instance locations")
-        st.caption(
-            "The map includes the probe's reported location and the root "
-            "instances implicated by the selected rule."
-        )
-        st.map(pd.DataFrame(map_rows))
+            root_points["server_label"] = root_points[
+                "root_letter_display"
+            ].map(lambda x: f"{x}-root")
+
+            if "root_ns" in root_points.columns:
+                root_points["server_label"] = root_points.apply(
+                    lambda row: (
+                        f"{row['root_letter_display']}-root: {row['root_ns']}"
+                        if pd.notna(row.get("root_ns"))
+                        else f"{row['root_letter_display']}-root"
+                    ),
+                    axis=1,
+                )
+            elif "hostname" in root_points.columns:
+                root_points["server_label"] = root_points.apply(
+                    lambda row: (
+                        f"{row['root_letter_display']}-root: {row['hostname']}"
+                        if pd.notna(row.get("hostname"))
+                        else f"{row['root_letter_display']}-root"
+                    ),
+                    axis=1,
+                )
+
+            root_points = (
+                root_points[
+                    [
+                        "dns_lat",
+                        "dns_lon",
+                        "server_label",
+                        "root_letter_display",
+                    ]
+                ]
+                .drop_duplicates()
+                .rename(columns={"dns_lat": "lat", "dns_lon": "lon"})
+            )
+
+            probe_point = pd.DataFrame(
+                [
+                    {
+                        "lat": float(probe_lat),
+                        "lon": float(probe_lon),
+                        "label": f"Probe {probe_id} reported location",
+                    }
+                ]
+            )
+
+            arcs = root_points.copy()
+            arcs["probe_lat"] = float(probe_lat)
+            arcs["probe_lon"] = float(probe_lon)
+
+            all_lats = [float(probe_lat)] + root_points["lat"].astype(float).tolist()
+            all_lons = [float(probe_lon)] + root_points["lon"].astype(float).tolist()
+
+            view_state = pdk.ViewState(
+                latitude=sum(all_lats) / len(all_lats),
+                longitude=sum(all_lons) / len(all_lons),
+                zoom=1.2,
+            )
+
+            probe_layer = pdk.Layer(
+                "ScatterplotLayer",
+                data=probe_point,
+                get_position="[lon, lat]",
+                get_radius=90000,
+                get_fill_color=[20, 90, 220, 220],
+                pickable=True,
+            )
+
+            root_layer = pdk.Layer(
+                "ScatterplotLayer",
+                data=root_points,
+                get_position="[lon, lat]",
+                get_radius=70000,
+                get_fill_color=[220, 60, 60, 220],
+                pickable=True,
+            )
+
+            arc_layer = pdk.Layer(
+                "ArcLayer",
+                data=arcs,
+                get_source_position="[probe_lon, probe_lat]",
+                get_target_position="[lon, lat]",
+                get_source_color=[20, 90, 220, 160],
+                get_target_color=[220, 60, 60, 160],
+                get_width=2,
+                pickable=False,
+            )
+
+            st.subheader("Probe and violating root-instance locations")
+            st.caption(
+                "Blue marks the probe's reported location; red marks violating "
+                "root-server instances. Lines show the geographic relationship "
+                "used by the SOI distance check."
+            )
+
+            st.pydeck_chart(
+                pdk.Deck(
+                    layers=[arc_layer, root_layer, probe_layer],
+                    initial_view_state=view_state,
+                    tooltip={
+                        "html": "<b>{label}{server_label}</b>",
+                        "style": {"backgroundColor": "#222", "color": "white"},
+                    },
+                    map_style=None,
+                ),
+                use_container_width=True,
+            )
 
     with st.expander("Show daily rule counts"):
         daily_display = probe_summary[
@@ -470,6 +594,11 @@ if check:
             }
         )
 
+        if "Snapshots used" in daily_display.columns:
+            daily_display["Snapshots used"] = daily_display[
+                "Snapshots used"
+            ].apply(format_snapshot_slots)
+
         st.dataframe(
             daily_display,
             use_container_width=True,
@@ -480,5 +609,5 @@ st.divider()
 st.caption(
     "Methodology: for each probe/root-letter/day, the checker uses the "
     "minimum RTT among the scheduled snapshots available that day. The "
-    "maximum feasible distance is RTT/2 × 199,862.638 km/s."
+    "maximum feasible distance is RTT/2 × the assumed speed of light in optical fiber."
 )
