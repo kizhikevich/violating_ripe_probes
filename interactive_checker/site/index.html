@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="RIPE Atlas SOI Checker" />
+  <title>RIPE Atlas SOI Checker</title>
+
+  <link rel="preconnect" href="https://unpkg.com" />
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIINfQ3yn5haKWrq8xvT/5d6k/Ys3hD7l7M="
+    crossorigin=""
+  />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="page-shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">RIPE Atlas</p>
+        <h1>SOI Checker</h1>
+        <p class="lede">
+          Check whether a RIPE Atlas probe's reported location is inconsistent with latency to
+          root-server instances. Daily results use the minimum RTT observed across the scheduled
+          06:00, 12:00, and 18:00 UTC snapshots available for that day. For more details about
+          methodology, see
+          <a href="https://kizhikevich.github.io/assets/papers/ripe_paper.pdf" target="_blank" rel="noopener">our paper</a>.
+        </p>
+      </div>
+      <div id="data-status" class="data-status">Loading data…</div>
+    </header>
+
+    <section class="checker-card">
+      <div class="controls-grid">
+        <label class="field probe-field">
+          <span>RIPE Atlas probe ID</span>
+          <input id="probe-id" type="number" min="1" step="1" placeholder="e.g. 10001" />
+        </label>
+
+        <label class="field">
+          <span>Look back</span>
+          <div class="input-suffix">
+            <input id="lookback-days" type="number" min="1" max="30" step="1" value="1" />
+            <span>days</span>
+          </div>
+        </label>
+
+        <button id="check-button" type="button">Check probe</button>
+      </div>
+
+      <div class="toggle-row">
+        <label class="toggle-control">
+          <input id="buffer-toggle" type="checkbox" checked />
+          <span>100 km tolerance</span>
+          <small>Paper default</small>
+        </label>
+
+        <label class="toggle-control">
+          <input id="letters-toggle" type="checkbox" checked />
+          <span>Require ≥2 root letters</span>
+          <small>Paper default</small>
+        </label>
+      </div>
+    </section>
+
+    <section id="message" class="message hidden" aria-live="polite"></section>
+
+    <section id="results" class="hidden">
+      <div id="result-banner" class="result-banner"></div>
+
+      <div class="metric-grid">
+        <div class="metric-card">
+          <span>Days with data</span>
+          <strong id="metric-days">—</strong>
+        </div>
+        <div class="metric-card">
+          <span>Violating days</span>
+          <strong id="metric-violating-days">—</strong>
+        </div>
+        <div class="metric-card">
+          <span>Roots observed</span>
+          <strong id="metric-roots">—</strong>
+        </div>
+        <div class="metric-card">
+          <span>Latest day's snapshots</span>
+          <strong id="metric-slots">—</strong>
+        </div>
+      </div>
+
+      <p id="probe-meta" class="probe-meta"></p>
+
+      <section id="violation-section" class="hidden">
+        <div class="section-heading">
+          <div>
+            <h2>Where does it violate?</h2>
+            <p id="rule-description"></p>
+          </div>
+        </div>
+
+        <div class="metric-grid compact">
+          <div class="metric-card">
+            <span>Violating root letters</span>
+            <strong id="metric-letters">—</strong>
+          </div>
+          <div class="metric-card">
+            <span>Largest violation margin</span>
+            <strong id="metric-margin">—</strong>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table id="violations-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Root</th>
+                <th>Root instance</th>
+                <th>Min RTT snapshot (UTC)</th>
+                <th>RTT (ms)</th>
+                <th>Distance (km)</th>
+                <th>Max feasible (km)</th>
+                <th>Beyond threshold (km)</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div class="map-card">
+          <div class="map-header">
+            <div>
+              <h2>Probe and violating root-instance locations</h2>
+              <p>The map shows the probe's reported location and the violating root-server instances.</p>
+            </div>
+            <div class="map-legend" aria-label="Map legend">
+              <span><i class="legend-dot probe-dot"></i>Reported probe location</span>
+              <span><i class="legend-dot root-dot"></i>Violating root-server instance</span>
+            </div>
+          </div>
+          <div id="map"></div>
+        </div>
+      </section>
+
+      <details class="daily-details">
+        <summary>Show daily rule counts</summary>
+        <div class="table-wrap">
+          <table id="daily-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Violating letters (0 km)</th>
+                <th>Violating letters (100 km)</th>
+                <th>Roots observed</th>
+                <th>Snapshots used</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </details>
+    </section>
+
+    <footer>
+      Methodology: for each probe/root-letter/day, the checker uses the minimum RTT among the
+      scheduled snapshots available that day. The maximum feasible distance is RTT/2 × the assumed
+      speed of light in optical fiber.
+    </footer>
+  </main>
+
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+  <script src="app.js"></script>
+</body>
+</html>
