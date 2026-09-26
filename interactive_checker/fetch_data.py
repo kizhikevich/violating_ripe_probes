@@ -542,6 +542,102 @@ def make_probe_summary(observations, target_date, loaded_slots):
     return summary
 
 
+
+def _json_value(value):
+    """Convert pandas/numpy scalars to JSON-safe Python values."""
+    if value is None or pd.isna(value):
+        return None
+    if isinstance(value, (np.bool_, bool)):
+        return bool(value)
+    if isinstance(value, (np.integer, int)):
+        return int(value)
+    if isinstance(value, (np.floating, float)):
+        return float(value)
+    return str(value)
+
+
+def write_web_data(summary, observations, target_date, loaded_slots, site_dir):
+    """
+    Write a compact static JSON file consumed by the GitHub Pages UI.
+
+    The browser does not recompute SOI. Probe-level rule outcomes are exported
+    explicitly, and detailed rows are exported only for observations that
+    violate the 0 km threshold (the 100 km set is a subset of these rows).
+    """
+    site_dir = Path(site_dir)
+    web_data_dir = site_dir / "data"
+    web_data_dir.mkdir(parents=True, exist_ok=True)
+
+    violating = observations.loc[observations["violates_0km"].fillna(False)].copy()
+    details_by_probe = {}
+
+    for row in violating.itertuples(index=False):
+        detail = {
+            "root": str(row.root_letter).upper(),
+            "root_ns": _json_value(getattr(row, "root_ns", None)),
+            "hostname": _json_value(getattr(row, "hostname", None)),
+            "slot": _json_value(getattr(row, "min_rtt_slot_utc", None)),
+            "rtt_ms": _json_value(getattr(row, "rtt_ms", None)),
+            "distance_km": _json_value(getattr(row, "haversine_distance_km", None)),
+            "max_feasible_km": _json_value(getattr(row, "furthest_possible_km", None)),
+            "excess_km": _json_value(getattr(row, "excess_km", None)),
+            "dns_lat": _json_value(getattr(row, "dns_lat", None)),
+            "dns_lon": _json_value(getattr(row, "dns_lon", None)),
+        }
+        details_by_probe.setdefault(str(int(row.probe_id)), []).append(detail)
+
+    probes = {}
+    for row in summary.itertuples(index=False):
+        probe_id = str(int(row.probe_id))
+        probes[probe_id] = {
+            "country": _json_value(getattr(row, "country", None)),
+            "asn_v4": _json_value(getattr(row, "asn_v4", None)),
+            "latitude": _json_value(getattr(row, "latitude", None)),
+            "longitude": _json_value(getattr(row, "longitude", None)),
+            "roots_observed": _json_value(getattr(row, "num_roots_observed", None)),
+            "counts": {
+                "0km": int(getattr(row, "num_violating_letters_0km")),
+                "100km": int(getattr(row, "num_violating_letters_100km")),
+            },
+            "flags": {
+                "0_1": bool(getattr(row, "violates_0km_1letter")),
+                "0_2": bool(getattr(row, "violates_0km_2letters")),
+                "100_1": bool(getattr(row, "violates_100km_1letter")),
+                "100_2": bool(getattr(row, "violates_100km_2letters")),
+            },
+            "violations": details_by_probe.get(probe_id, []),
+        }
+
+    payload = {
+        "date": str(target_date),
+        "slots": list(loaded_slots),
+        "probes": probes,
+    }
+
+    day_path = web_data_dir / f"{target_date}.json"
+    day_path.write_text(
+        json.dumps(payload, separators=(",", ":"), allow_nan=False),
+        encoding="utf-8",
+    )
+
+    # Rebuild a tiny index of all dates currently available to the static site.
+    dates = sorted(
+        [path.stem for path in web_data_dir.glob("????-??-??.json")],
+        reverse=True,
+    )
+    index_payload = {
+        "latest": dates[0] if dates else None,
+        "dates": dates,
+    }
+    (web_data_dir / "index.json").write_text(
+        json.dumps(index_payload, separators=(",", ":")),
+        encoding="utf-8",
+    )
+
+    print(f"Wrote web data:      {day_path}")
+    print(f"Updated web index:   {web_data_dir / 'index.json'}")
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description=(
@@ -592,6 +688,12 @@ def parse_args():
         "--csv",
         action="store_true",
         help="Also write CSV copies of observations and summary.",
+    )
+
+    parser.add_argument(
+        "--site-dir",
+        default="site",
+        help="Static GitHub Pages site directory. Default: site/",
     )
 
     return parser.parse_args()
@@ -734,6 +836,15 @@ def main():
     print()
     print(f"Wrote observations: {observations_path}")
     print(f"Wrote summary:      {summary_path}")
+
+    # 6. Export compact JSON for the static GitHub Pages checker.
+    write_web_data(
+        summary=summary,
+        observations=observations,
+        target_date=target_date,
+        loaded_slots=loaded_slots,
+        site_dir=args.site_dir,
+    )
 
     if args.csv:
         observations.to_csv(
