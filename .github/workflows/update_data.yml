@@ -1,4 +1,4 @@
-name: Update RIPE Atlas data
+name: Update RIPE Atlas data and deploy checker
 
 on:
   schedule:
@@ -20,10 +20,19 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
 
 jobs:
   update-data:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - name: Check out repository
@@ -49,28 +58,42 @@ jobs:
               "0 6 * * *") SLOT="06" ;;
               "0 12 * * *") SLOT="12" ;;
               "0 18 * * *") SLOT="18" ;;
+              *) echo "Unknown schedule"; exit 1 ;;
             esac
           fi
-
           echo "slot=$SLOT" >> "$GITHUB_OUTPUT"
 
-      - name: Fetch RIPE Atlas snapshot
+      - name: Fetch and process RIPE Atlas snapshot
         working-directory: interactive_checker
         run: |
           python fetch_data.py \
             --slot "${{ steps.slot.outputs.slot }}" \
-            --root-locations root_locations.csv
+            --root-locations root_locations.csv \
+            --site-dir site
 
-      - name: Commit updated data
+      - name: Commit generated data
+        shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add interactive_checker/data/
+          git add interactive_checker/data/ interactive_checker/site/data/
 
           if git diff --cached --quiet; then
-            echo "No data changes"
+            echo "No generated data changes"
           else
             git commit -m "Update RIPE Atlas snapshot ${{ steps.slot.outputs.slot }} UTC"
             git push
           fi
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: interactive_checker/site
+
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
