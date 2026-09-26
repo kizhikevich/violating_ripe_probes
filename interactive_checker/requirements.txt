@@ -1,7 +1,4 @@
-streamlit
+requests
 pandas
 numpy
-requests
-ijson
 pyarrow
-pydeck
