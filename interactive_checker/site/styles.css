@@ -214,3 +214,14 @@ footer { color: var(--muted); font-size: .86rem; margin-top: 28px; padding-top: 
   .map-legend { margin-top: 14px; }
   #map { height: 380px; }
 }
+
+.leaflet-container img,
+.leaflet-container .leaflet-tile {
+    max-width: none !important;
+    max-height: none !important;
+}
+
+.leaflet-container {
+    width: 100%;
+    height: 520px;
+}
