@@ -22,9 +22,8 @@ const els = {
 };
 
 let indexData = null;
-let map = null;
-let mapLayer = null;
 const dayCache = new Map();
+let worldDataPromise = null;
 
 function showMessage(text) {
   els.message.textContent = text;
@@ -133,65 +132,137 @@ function buildViolationsTable(details, bufferKm) {
   }
 }
 
-function makeCircleIcon(color, size = 16) {
-  return L.divIcon({
-    className: "",
-    html: `<div class="circle-marker" style="width:${size}px;height:${size}px;background:${color}"></div>`,
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2],
-  });
+async function loadWorldData() {
+  if (!worldDataPromise) {
+    worldDataPromise = fetch(
+      "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json"
+    ).then((response) => {
+      if (!response.ok) throw new Error("Could not load static world outline");
+      return response.json();
+    });
+  }
+  return worldDataPromise;
 }
 
-function renderMap(probe, details) {
+async function renderMap(probe, details) {
   const mapEl = document.getElementById("map");
-  if (map) {
-    map.remove();
-    map = null;
+  mapEl.innerHTML = "";
+
+  try {
+    const topology = await loadWorldData();
+    const countries = topojson.feature(topology, topology.objects.countries);
+
+    const width = 1200;
+    const height = 600;
+
+    const svg = d3
+      .select(mapEl)
+      .append("svg")
+      .attr("viewBox", `0 0 ${width} ${height}`)
+      .attr("role", "img")
+      .attr(
+        "aria-label",
+        "World map showing the reported probe location in blue and violating root-server instances in red."
+      );
+
+    const projection = d3
+      .geoNaturalEarth1()
+      .fitExtent([[18, 18], [width - 18, height - 18]], { type: "Sphere" });
+
+    const path = d3.geoPath(projection);
+
+    svg
+      .append("path")
+      .datum({ type: "Sphere" })
+      .attr("class", "map-ocean")
+      .attr("d", path);
+
+    svg
+      .append("g")
+      .selectAll("path")
+      .data(countries.features)
+      .join("path")
+      .attr("class", "map-country")
+      .attr("d", path);
+
+    svg
+      .append("path")
+      .datum(d3.geoGraticule10())
+      .attr("class", "map-graticule")
+      .attr("d", path);
+
+    const points = [];
+
+    if (
+      probe.latitude !== null &&
+      probe.latitude !== undefined &&
+      probe.longitude !== null &&
+      probe.longitude !== undefined
+    ) {
+      points.push({
+        type: "probe",
+        lat: Number(probe.latitude),
+        lon: Number(probe.longitude),
+        label: "Reported probe location",
+      });
+    }
+
+    const seen = new Set();
+    for (const row of details) {
+      if (
+        row.dns_lat === null ||
+        row.dns_lat === undefined ||
+        row.dns_lon === null ||
+        row.dns_lon === undefined
+      ) {
+        continue;
+      }
+
+      const key = [
+        row.root || "",
+        row.root_ns || row.hostname || "",
+        row.dns_lat,
+        row.dns_lon,
+      ].join("|");
+
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      const root = String(row.root || "").toUpperCase();
+      const instance = row.root_ns || row.hostname || "instance";
+
+      points.push({
+        type: "root",
+        lat: Number(row.dns_lat),
+        lon: Number(row.dns_lon),
+        label: `${root}-root — ${instance}`,
+      });
+    }
+
+    const pointGroups = svg
+      .append("g")
+      .attr("class", "map-points")
+      .selectAll("g")
+      .data(points)
+      .join("g")
+      .attr("transform", (d) => {
+        const projected = projection([d.lon, d.lat]);
+        return projected ? `translate(${projected[0]},${projected[1]})` : "translate(-100,-100)";
+      });
+
+    pointGroups
+      .append("circle")
+      .attr("class", (d) =>
+        d.type === "probe" ? "map-point probe-point" : "map-point root-point"
+      )
+      .attr("r", (d) => (d.type === "probe" ? 9 : 7));
+
+    pointGroups.append("title").text((d) => d.label);
+  } catch (error) {
+    console.error(error);
+    mapEl.innerHTML =
+      '<div class="map-error">The world map could not be loaded. The violation table above is still complete.</div>';
   }
-
-  map = L.map(mapEl, { worldCopyJump: true });
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 18,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-  }).addTo(map);
-
-  mapLayer = L.layerGroup().addTo(map);
-  const bounds = [];
-
-  if (probe.latitude !== null && probe.longitude !== null) {
-    const lat = Number(probe.latitude);
-    const lon = Number(probe.longitude);
-    L.marker([lat, lon], { icon: makeCircleIcon("#2563eb", 18) })
-      .bindTooltip(`Probe — reported location`)
-      .addTo(mapLayer);
-    bounds.push([lat, lon]);
-  }
-
-  const seen = new Set();
-  for (const row of details) {
-    if (row.dns_lat === null || row.dns_lon === null) continue;
-    const key = `${row.root}|${row.root_ns || row.hostname}|${row.dns_lat}|${row.dns_lon}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-
-    const lat = Number(row.dns_lat);
-    const lon = Number(row.dns_lon);
-    const label = `${row.root}-root — ${row.root_ns || row.hostname || "instance"}`;
-    L.marker([lat, lon], { icon: makeCircleIcon("#ef4444", 15) })
-      .bindTooltip(label)
-      .addTo(mapLayer);
-    bounds.push([lat, lon]);
-  }
-
-  if (bounds.length > 1) {
-    map.fitBounds(bounds, { padding: [35, 35], maxZoom: 6 });
-  } else if (bounds.length === 1) {
-    map.setView(bounds[0], 5);
-  } else {
-    map.setView([20, 0], 2);
-  }
-
-  setTimeout(() => map.invalidateSize(), 50);
 }
 
 async function checkProbe() {
@@ -271,7 +342,7 @@ async function checkProbe() {
     els.metricMargin.textContent = margins.length ? `${Math.max(...margins).toLocaleString(undefined, { maximumFractionDigits: 0 })} km` : "—";
 
     buildViolationsTable(details, bufferKm);
-    renderMap(latestRow.probe, details);
+    await renderMap(latestRow.probe, details);
   } catch (error) {
     console.error(error);
     showMessage(`The checker could not load its data: ${error.message}`);

@@ -4,15 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="RIPE Atlas SOI Checker" />
-  <title>UCSD & UCLA</title>
-
-  <link rel="preconnect" href="https://unpkg.com" />
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIINfQ3yn5haKWrq8xvT/5d6k/Ys3hD7l7M="
-    crossorigin=""
-  />
+  <title>RIPE Atlas SOI Checker</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -132,14 +124,14 @@
           <div class="map-header">
             <div>
               <h2>Probe and violating root-instance locations</h2>
-              <p>The map shows the probe's reported location and the violating root-server instances.</p>
+              <p>World overview of the probe's reported location and violating root-server instances.</p>
             </div>
             <div class="map-legend" aria-label="Map legend">
               <span><i class="legend-dot probe-dot"></i>Reported probe location</span>
               <span><i class="legend-dot root-dot"></i>Violating root-server instance</span>
             </div>
           </div>
-          <div id="map"></div>
+          <div id="map" class="world-map" aria-label="World map of probe and violating root-server locations"></div>
         </div>
       </section>
 
@@ -168,12 +160,9 @@
       speed of light in optical fiber.
     </footer>
   </main>
-
-  <script
-    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-    crossorigin=""
-  ></script>
+  <!-- Static SVG world map: no map tiles, pan, or zoom. -->
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

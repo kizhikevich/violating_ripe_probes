@@ -190,12 +190,51 @@ tbody tr:last-child td { border-bottom: 0; }
 .legend-dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; margin-right: 7px; }
 .probe-dot { background: var(--probe); }
 .root-dot { background: var(--root); }
-#map { height: 480px; width: 100%; }
+/* Static world overview: no Leaflet or map tiles. */
+.world-map {
+  width: 100%;
+  background: #dceff6;
+}
 
-.leaflet-marker-icon.circle-marker {
-  border-radius: 50%;
-  border: 2px solid white;
-  box-shadow: 0 1px 4px rgba(0,0,0,.35);
+.world-map svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.map-ocean {
+  fill: #dceff6;
+  stroke: #c5dce7;
+  stroke-width: 1;
+}
+
+.map-country {
+  fill: #f3f0ea;
+  stroke: #c8ced7;
+  stroke-width: 0.65;
+  vector-effect: non-scaling-stroke;
+}
+
+.map-graticule {
+  fill: none;
+  stroke: rgba(106, 128, 151, 0.18);
+  stroke-width: 0.55;
+  vector-effect: non-scaling-stroke;
+}
+
+.map-point {
+  stroke: white;
+  stroke-width: 2.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.probe-point { fill: var(--probe); }
+.root-point { fill: var(--root); }
+
+.map-error {
+  padding: 32px;
+  color: var(--muted);
+  text-align: center;
 }
 
 .daily-details { margin-top: 24px; padding: 0; overflow: hidden; }
@@ -212,16 +251,4 @@ footer { color: var(--muted); font-size: .86rem; margin-top: 28px; padding-top: 
   .metric-grid, .metric-grid.compact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .map-header { display: block; }
   .map-legend { margin-top: 14px; }
-  #map { height: 380px; }
-}
-
-.leaflet-container img,
-.leaflet-container .leaflet-tile {
-    max-width: none !important;
-    max-height: none !important;
-}
-
-.leaflet-container {
-    width: 100%;
-    height: 520px;
 }
