@@ -25,79 +25,63 @@ let indexData = null;
 const dayCache = new Map();
 let worldDataPromise = null;
 
-// Download the newest dated list from the repository root.
-// The public GitHub API is called only when someone clicks the button.
-const downloadButton = document.getElementById("download-violators-button");
-const downloadStatus = document.getElementById("download-violators-status");
+// Prepare the latest published list when the page loads, not after the click.
+// The link starts as a working GitHub fallback and becomes a native .txt
+// download link once the newest file has been fetched into a Blob.
+const latestViolatorsLink = document.getElementById("latest-violators-link");
+const latestViolatorsStatus = document.getElementById("download-violators-status");
 
-async function downloadLatestViolators() {
-  downloadButton.disabled = true;
-  downloadButton.textContent = "Finding latest list…";
-  downloadStatus.textContent = "";
+async function prepareLatestViolatorsDownload() {
+  if (!latestViolatorsLink || !latestViolatorsStatus) return;
 
   try {
     const response = await fetch(
-      "https://api.github.com/repos/kizhikevich/violating_ripe_probes/contents/?ref=main",
+      "https://api.github.com/repos/kizhikevich/violating_ripe_probes/contents?ref=main",
       {
         cache: "no-store",
         headers: { Accept: "application/vnd.github+json" },
       }
     );
-
-    if (!response.ok) {
-      throw new Error(`GitHub returned HTTP ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`GitHub API returned ${response.status}`);
 
     const contents = await response.json();
-    if (!Array.isArray(contents)) {
-      throw new Error("Unexpected GitHub directory listing");
-    }
+    if (!Array.isArray(contents)) throw new Error("Invalid GitHub file listing");
 
-    // YYYYMMDD sorts chronologically when filenames are sorted descending.
-    const candidates = contents
-      .filter((file) =>
-        file.type === "file" && /^probe_ids_\d{8}\.txt$/.test(file.name)
+    // YYYYMMDD in these filenames sorts correctly in descending order.
+    const newest = contents
+      .filter((entry) =>
+        entry.type === "file" && /^probe_ids_\d{8}\.txt$/.test(entry.name)
       )
-      .sort((a, b) => b.name.localeCompare(a.name));
+      .sort((a, b) => b.name.localeCompare(a.name))[0];
 
-    if (candidates.length === 0) {
-      throw new Error("No probe_ids_YYYYMMDD.txt files found in the repository root");
+    if (!newest || !newest.download_url) {
+      throw new Error("No dated probe list was found");
     }
 
-    const latest = candidates[0];
-    if (!latest.download_url) {
-      throw new Error("The latest file has no download URL");
-    }
+    const fileResponse = await fetch(newest.download_url, { cache: "no-store" });
+    if (!fileResponse.ok) throw new Error(`File fetch returned ${fileResponse.status}`);
 
-    // Fetch as a Blob so browsers download the .txt rather than opening it.
-    const fileResponse = await fetch(latest.download_url, {
-      cache: "no-store",
-    });
-    if (!fileResponse.ok) {
-      throw new Error(`Could not fetch ${latest.name} (HTTP ${fileResponse.status})`);
-    }
+    // A real user click on an already-prepared blob: URL works in browsers
+    // that block asynchronous programmatic downloads.
+    const fileBlob = await fileResponse.blob();
+    const objectUrl = URL.createObjectURL(fileBlob);
 
-    const blob = await fileResponse.blob();
-    const blobUrl = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = blobUrl;
-    link.download = latest.name;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
-
-    downloadStatus.textContent = `Downloaded ${latest.name}`;
+    latestViolatorsLink.href = objectUrl;
+    latestViolatorsLink.download = newest.name;
+    latestViolatorsLink.removeAttribute("target");
+    latestViolatorsLink.removeAttribute("rel");
+    latestViolatorsLink.textContent = "Download latest violator list (.txt)";
+    latestViolatorsStatus.textContent = `Latest: ${newest.name}`;
   } catch (error) {
-    console.error("Download failed:", error);
-    downloadStatus.textContent = `Download failed: ${error.message}`;
-  } finally {
-    downloadButton.disabled = false;
-    downloadButton.textContent = "Download latest violator list (.txt)";
+    console.error("Could not prepare violator-list download:", error);
+    // Do not leave a dead button: the original GitHub link still works.
+    latestViolatorsStatus.textContent =
+      "Automatic download unavailable; opens the published file on GitHub.";
   }
 }
 
-downloadButton.addEventListener("click", downloadLatestViolators);
+// Independent of the probe checker and its daily JSON data.
+prepareLatestViolatorsDownload();
 
 function showMessage(text) {
   els.message.textContent = text;

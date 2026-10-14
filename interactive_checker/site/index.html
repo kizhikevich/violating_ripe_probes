@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="RIPE Atlas SOI Checker" />
   <title>RIPE Atlas SOI Checker</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=20261014-1" />
 </head>
 <body>
   <main class="page-shell">
@@ -21,10 +21,19 @@
           <a href="https://kizhikevich.github.io/assets/papers/ripe_paper.pdf" target="_blank" rel="noopener">our paper</a>.
         </p>
         <div class="download-row">
-          <button id="download-violators-button" class="download-button" type="button">
-            Download latest violator list (.txt)
-          </button>
-          <span id="download-violators-status" class="download-status" role="status" aria-live="polite"></span>
+          <!-- A real link works even if JavaScript fails or is cached. -->
+          <a
+            id="latest-violators-link"
+            class="download-button"
+            href="https://github.com/kizhikevich/violating_ripe_probes/blob/main/probe_ids_20261001.txt"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            View published violator list on GitHub
+          </a>
+          <span id="download-violators-status" class="download-status" role="status" aria-live="polite">
+            Preparing latest download…
+          </span>
         </div>
       </div>
       <div id="data-status" class="data-status">Loading data…</div>
@@ -169,6 +178,6 @@
   <!-- Static SVG world map: no map tiles, pan, or zoom. -->
   <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
-  <script src="app.js"></script>
+  <script src="app.js?v=20261014-1"></script>
 </body>
 </html>

@@ -121,14 +121,23 @@ button:hover { background: var(--accent-dark); }
 }
 
 .download-button {
-  padding: 0 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 8px 16px;
   border: 1px solid #c9dcff;
+  border-radius: 10px;
   background: #eaf2ff;
   color: var(--accent-dark);
+  font-weight: 800;
+  text-decoration: none;
+  cursor: pointer;
 }
 
 .download-button:hover {
   background: #dbe9ff;
+  text-decoration: none;
 }
 
 .download-status {
