@@ -25,6 +25,80 @@ let indexData = null;
 const dayCache = new Map();
 let worldDataPromise = null;
 
+// Download the newest dated list from the repository root.
+// The public GitHub API is called only when someone clicks the button.
+const downloadButton = document.getElementById("download-violators-button");
+const downloadStatus = document.getElementById("download-violators-status");
+
+async function downloadLatestViolators() {
+  downloadButton.disabled = true;
+  downloadButton.textContent = "Finding latest list…";
+  downloadStatus.textContent = "";
+
+  try {
+    const response = await fetch(
+      "https://api.github.com/repos/kizhikevich/violating_ripe_probes/contents/?ref=main",
+      {
+        cache: "no-store",
+        headers: { Accept: "application/vnd.github+json" },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`GitHub returned HTTP ${response.status}`);
+    }
+
+    const contents = await response.json();
+    if (!Array.isArray(contents)) {
+      throw new Error("Unexpected GitHub directory listing");
+    }
+
+    // YYYYMMDD sorts chronologically when filenames are sorted descending.
+    const candidates = contents
+      .filter((file) =>
+        file.type === "file" && /^probe_ids_\d{8}\.txt$/.test(file.name)
+      )
+      .sort((a, b) => b.name.localeCompare(a.name));
+
+    if (candidates.length === 0) {
+      throw new Error("No probe_ids_YYYYMMDD.txt files found in the repository root");
+    }
+
+    const latest = candidates[0];
+    if (!latest.download_url) {
+      throw new Error("The latest file has no download URL");
+    }
+
+    // Fetch as a Blob so browsers download the .txt rather than opening it.
+    const fileResponse = await fetch(latest.download_url, {
+      cache: "no-store",
+    });
+    if (!fileResponse.ok) {
+      throw new Error(`Could not fetch ${latest.name} (HTTP ${fileResponse.status})`);
+    }
+
+    const blob = await fileResponse.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = blobUrl;
+    link.download = latest.name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+
+    downloadStatus.textContent = `Downloaded ${latest.name}`;
+  } catch (error) {
+    console.error("Download failed:", error);
+    downloadStatus.textContent = `Download failed: ${error.message}`;
+  } finally {
+    downloadButton.disabled = false;
+    downloadButton.textContent = "Download latest violator list (.txt)";
+  }
+}
+
+downloadButton.addEventListener("click", downloadLatestViolators);
+
 function showMessage(text) {
   els.message.textContent = text;
   els.message.classList.remove("hidden");

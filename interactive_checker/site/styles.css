@@ -110,6 +110,31 @@ button {
   cursor: pointer;
 }
 button:hover { background: var(--accent-dark); }
+
+/* Latest published violator-list download button */
+.download-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.download-button {
+  padding: 0 16px;
+  border: 1px solid #c9dcff;
+  background: #eaf2ff;
+  color: var(--accent-dark);
+}
+
+.download-button:hover {
+  background: #dbe9ff;
+}
+
+.download-status {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
 button:disabled { opacity: .6; cursor: wait; }
 
 .toggle-row {
