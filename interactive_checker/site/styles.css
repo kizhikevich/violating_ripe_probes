@@ -111,26 +111,46 @@ button {
 }
 button:hover { background: var(--accent-dark); }
 
-/* Latest published violator-list download button */
-.download-row {
+/* Header actions sit beneath the newest-data badge on the right. */
+.hero > div:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.header-actions {
+  flex: 0 0 320px;
+  width: 320px;
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 18px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.header-actions .data-status {
+  align-self: flex-end;
+}
+
+.header-links {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
 }
 
 .download-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 100%;
   min-height: 44px;
-  padding: 8px 16px;
+  padding: 9px 12px;
   border: 1px solid #c9dcff;
   border-radius: 10px;
   background: #eaf2ff;
   color: var(--accent-dark);
+  font-size: 0.9rem;
+  line-height: 1.35;
   font-weight: 800;
+  text-align: center;
   text-decoration: none;
   cursor: pointer;
 }
@@ -140,9 +160,21 @@ button:hover { background: var(--accent-dark); }
   text-decoration: none;
 }
 
+.github-button {
+  background: #ffffff;
+  border-color: #cfd6e0;
+  color: #334155;
+}
+
+.github-button:hover {
+  background: #f1f5f9;
+}
+
 .download-status {
-  font-size: 0.85rem;
   color: var(--muted);
+  font-size: 0.8rem;
+  text-align: right;
+  overflow-wrap: anywhere;
 }
 button:disabled { opacity: .6; cursor: wait; }
 
@@ -280,7 +312,9 @@ footer { color: var(--muted); font-size: .86rem; margin-top: 28px; padding-top: 
 @media (max-width: 780px) {
   .page-shell { width: min(100% - 20px, 1180px); padding-top: 24px; }
   .hero { display: block; }
-  .data-status { display: inline-block; margin-top: 8px; }
+  .header-actions { width: 100%; margin-top: 20px; }
+  .header-actions .data-status { align-self: flex-start; }
+  .download-status { text-align: left; }
   .controls-grid { grid-template-columns: 1fr; }
   .metric-grid, .metric-grid.compact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .map-header { display: block; }

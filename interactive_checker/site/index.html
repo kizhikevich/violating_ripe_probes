@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="RIPE Atlas SOI Checker" />
   <title>RIPE Atlas SOI Checker</title>
-  <link rel="stylesheet" href="styles.css?v=20261014-1" />
+  <link rel="stylesheet" href="styles.css?v=20261014-2" />
 </head>
 <body>
   <main class="page-shell">
@@ -20,8 +20,11 @@
           methodology, see
           <a href="https://kizhikevich.github.io/assets/papers/ripe_paper.pdf" target="_blank" rel="noopener">our paper</a>.
         </p>
-        <div class="download-row">
-          <!-- A real link works even if JavaScript fails or is cached. -->
+      </div>
+      <div class="header-actions">
+        <div id="data-status" class="data-status">Loading data…</div>
+        <div class="header-links">
+          <!-- Keep this ID: app.js prepares the newest .txt download here. -->
           <a
             id="latest-violators-link"
             class="download-button"
@@ -31,12 +34,19 @@
           >
             View published violator list on GitHub
           </a>
-          <span id="download-violators-status" class="download-status" role="status" aria-live="polite">
-            Preparing latest download…
-          </span>
+          <a
+            class="download-button github-button"
+            href="https://github.com/kizhikevich/violating_ripe_probes"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            View GitHub repository &#8599;
+          </a>
         </div>
+        <span id="download-violators-status" class="download-status" role="status" aria-live="polite">
+          Preparing latest download…
+        </span>
       </div>
-      <div id="data-status" class="data-status">Loading data…</div>
     </header>
 
     <section class="checker-card">
