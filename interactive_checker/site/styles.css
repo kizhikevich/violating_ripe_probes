@@ -126,8 +126,23 @@ button:hover { background: var(--accent-dark); }
   gap: 10px;
 }
 
+/* A full-width, non-interactive status row, matching the link rows' footprint. */
 .header-actions .data-status {
-  align-self: flex-end;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 44px;
+  padding: 9px 12px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: #244f91;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: center;
+  cursor: default;
 }
 
 .header-links {
@@ -313,7 +328,7 @@ footer { color: var(--muted); font-size: .86rem; margin-top: 28px; padding-top: 
   .page-shell { width: min(100% - 20px, 1180px); padding-top: 24px; }
   .hero { display: block; }
   .header-actions { width: 100%; margin-top: 20px; }
-  .header-actions .data-status { align-self: flex-start; }
+  .header-actions .data-status { align-self: stretch; }
   .download-status { text-align: left; }
   .controls-grid { grid-template-columns: 1fr; }
   .metric-grid, .metric-grid.compact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
