@@ -1,0 +1,62 @@
+name: Publish semi-monthly SOI violator list
+
+on:
+  # Same 1st/15th convention as the existing probe_ids_YYYYMMDD.txt files.
+  # Run after the previous day's 18:00 UTC data has been collected.
+  schedule:
+    - cron: "20 9 1,15 * *"
+
+  workflow_dispatch:
+    inputs:
+      release_date:
+        description: "Optional YYYY-MM-DD (1st or 15th); blank = latest release"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-soi-violators
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Generate list from already-published website JSON
+        id: export
+        env:
+          RELEASE_DATE: ${{ inputs.release_date }}
+        shell: bash
+        run: |
+          if [ -n "$RELEASE_DATE" ]; then
+            python interactive_checker/export_violators.py --release-date "$RELEASE_DATE"
+          else
+            python interactive_checker/export_violators.py
+          fi
+
+      - name: Commit and push published list
+        shell: bash
+        env:
+          OUTPUT_FILE: ${{ steps.export.outputs.filename }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- "$OUTPUT_FILE"
+          if git diff --cached --quiet; then
+            echo "Published list has not changed."
+            exit 0
+          fi
+          git commit -m "Publish SOI violators: $OUTPUT_FILE"
+          git push origin HEAD:main
