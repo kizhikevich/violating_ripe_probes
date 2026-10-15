@@ -9,12 +9,11 @@ Release periods:
   YYYY-MM-15 -> YYYY-MM-01 through YYYY-MM-14
   YYYY-MM-01 -> previous month's 15th through previous month's last day
 
-Output format matches the published three-column schema. The Ark field is
-left empty (unknown) because the website data does not contain Ark results.
+Output: a plain-text file containing one probe ID per line, without a header
+or any additional columns.
 """
 
 import argparse
-import csv
 import json
 import os
 import sys
@@ -134,13 +133,10 @@ def main() -> None:
     output_name = f"probe_ids_{release:%Y%m%d}.txt"
     output_path = args.output_dir / output_name
 
-    # Match the existing 3-column publication schema. The Ark result is
-    # unknown (blank), not False: the site only measures root-DNS violations.
+    # One ID per line, numeric order; no header or additional columns.
     with output_path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.writer(handle, lineterminator="\n")
-        writer.writerow(["probe_id", "violates_ark", "violates_rootdns"])
         for probe_id in ids:
-            writer.writerow([probe_id, "", "True"])
+            handle.write(f"{probe_id}\n")
 
     print(f"Release: {release.isoformat()}")
     print(f"Window: {start.isoformat()} through {end.isoformat()} (inclusive)")
