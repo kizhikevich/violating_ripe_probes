@@ -25,7 +25,10 @@ Results generated on or after 2025-11-15 use an updated output format that incor
 ## If your probe is in the correct spot, but we flagged it as a violator
 Please email me at katherine@ucsd.edu if you know your probe is in the right place, but something in our methodology says it is in the wrong spot. This could help us find the rare (n=1 thus far) case of incorrect DNS root servers or if your Virtual Private Server is not where you think it is. 
 
-To cite our paper, please use the following citation:
+## To cite our paper, please use the following citation:
 ```
-Katherine Izhikevich, Ben Du, Sumanth Rao, Manda Tran, Alisha Ukani, Ray Bellis, and Liz Izhikevich. 2026. Rooting Out Incorrect RIPE Atlas Probe Geolocations. In Proceedings of the 2026 ACM Internet Measurement Conference (IMC '26). Association for Computing Machinery, New York, NY, USA, 1057–1066. https://doi.org/10.1145/3777912.3839804
+Katherine Izhikevich, Ben Du, Sumanth Rao, Manda Tran, Alisha Ukani, Ray Bellis, and Liz Izhikevich. 2026.
+Rooting Out Incorrect RIPE Atlas Probe Geolocations. In Proceedings of the 2026 ACM Internet
+Measurement Conference (IMC '26). Association for Computing Machinery, New York, NY, USA,1057–1066.
+https://doi.org/10.1145/3777912.3839804
 ```
