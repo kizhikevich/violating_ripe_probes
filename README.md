@@ -1,8 +1,8 @@
 # RIPE Atlas Probes with Potentially Incorrect Reported Geolocation
 
-This repo contains supplementary data for the paper [Rooting Out Incorrect RIPE Atlas Probe Geolocations](https://kizhikevich.github.io/assets/papers/ripe_paper.pdf)
+This repo contains supplementary data for our IMC'26 paper [Rooting Out Incorrect RIPE Atlas Probe Geolocations](https://kizhikevich.github.io/assets/papers/ripe_paper.pdf)
 
-This repo contains biweekly-updated (on the 1st and 15th of the month) lists of RIPE Atlas Probe IDs that likely have incorrect reported geolocation. Users may want to avoid using these probes for scheduling measurements or as measurement targets.
+This repo contains biweekly-updated (on the 1st and 15th of the month) lists of RIPE Atlas Probe IDs that likely have incorrect reported geolocation since the last update. Users may want to avoid using these probes for scheduling measurements or as measurement targets.
 
 This repo also contains the execution pipeline that produces a list of violating RIPE Atlas Probe IDs.
 
@@ -20,13 +20,7 @@ This paper used to be called [Trust, But Verify, Operator-Reported Geolocation](
 
 ## Adding Methodology using DNS Root Servers
 
-Results generated on or after 2025-11-15 use an updated output format that incorporates detection of potentially mis-reported RIPE Atlas probes using RIPE Atlas DNS Root measurements. The methodology is adapted from the ISC project: https://github.com/isc-projects/atlas-vis
-
-The output now includes the following fields:
-
-- `probe_id` — the RIPE Atlas probe id
-- `violates_ark` — flagged by the Ark-based methodology
-- `violates_rootdns` — flagged by the DNS Root–based methodology
+Results generated on or after 2025-11-15 use an updated output format that incorporates detection of potentially mis-reported RIPE Atlas probes using RIPE Atlas DNS Root measurements. The methodology is adapted from the ISC project: https://github.com/isc-projects/atlas-vis and is the methodology of the final IMC'26 paper.
 
 ## If your probe is in the correct spot, but we flagged it as a violator
-Please please please email me at katherine@ucsd.edu if you know your probe is in the right place, but something in our methodology says it is in the wrong spot. This could help us find the rare (n=1 thus far) case of incorrect DNS root servers or if your Virtual Private Server is not where you think it is. 
+Please email me at katherine@ucsd.edu if you know your probe is in the right place, but something in our methodology says it is in the wrong spot. This could help us find the rare (n=1 thus far) case of incorrect DNS root servers or if your Virtual Private Server is not where you think it is. 
