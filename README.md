@@ -23,7 +23,7 @@ This paper used to be called [Trust, But Verify, Operator-Reported Geolocation](
 Results generated on or after 2025-11-15 use an updated output format that incorporates detection of potentially mis-reported RIPE Atlas probes using RIPE Atlas DNS Root measurements. The methodology is adapted from the ISC project: https://github.com/isc-projects/atlas-vis and is the methodology of the final IMC'26 paper.
 
 ## If your probe is in the correct spot, but we flagged it as a violator
-Please email me at katherine@ucsd.edu if you know your probe is in the right place, but something in our methodology says it is in the wrong spot. This could help us find the rare (n=1 thus far) case of incorrect DNS root servers or if your Virtual Private Server is not where you think it is. 
+Please email me at katherine@ucsd.edu if you know your probe is in the right place, but something in our methodology says it is in the wrong spot. This could help us find the rare (n=1 thus far) case of incorrect DNS root servers or if your VM is not where you think it is. 
 
 ## To cite our paper, please use the following citation:
 ```
