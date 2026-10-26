@@ -1,0 +1,83 @@
+name: Publish RIPE VIP link (JSONL)
+
+on:
+  # At 10:25 UTC on the 1st and 15th; after the earlier TXT-list workflow.
+  schedule:
+    - cron: "25 10 1,15 * *"
+
+  workflow_dispatch:
+    inputs:
+      release_date:
+        description: "Optional YYYY-MM-DD (1st or 15th); blank = latest release"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+# Use the same Pages concurrency group as the site's periodic deployment.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify exporter tests
+        run: python -m unittest discover -s interactive_checker/tests -p "test_export_ripe_vip_link.py" -v
+
+      - name: Build the JSONL from existing site data
+        id: export
+        shell: bash
+        env:
+          RELEASE_DATE: ${{ inputs.release_date }}
+        run: |
+          if [ -n "$RELEASE_DATE" ]; then
+            python interactive_checker/export_ripe_vip_link.py --release-date "$RELEASE_DATE"
+          else
+            python interactive_checker/export_ripe_vip_link.py
+          fi
+
+      - name: Commit and push the dated snapshot and both latest URLs
+        shell: bash
+        env:
+          SNAPSHOT: ${{ steps.export.outputs.snapshot }}
+          PROBE_COUNT: ${{ steps.export.outputs.count }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- "$SNAPSHOT" ripe_vip_link/latest.jsonl interactive_checker/site/ripe_vip_link.jsonl
+          if git diff --cached --quiet; then
+            echo "JSONL feed unchanged"
+          else
+            git commit -m "Publish RIPE VIP link: ${PROBE_COUNT} twice-confirmed probes"
+            git push origin HEAD:main
+          fi
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload updated website, including ripe_vip_link.jsonl
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: interactive_checker/site
+
+      - name: Deploy updated website
+        id: deployment
+        uses: actions/deploy-pages@v4
