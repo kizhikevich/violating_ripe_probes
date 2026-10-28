@@ -2,9 +2,7 @@ name: Update RIPE Atlas data and deploy checker
 
 on:
   schedule:
-    - cron: "0 6 * * *"
-    - cron: "0 12 * * *"
-    - cron: "0 18 * * *"
+    - cron: "0 2 * * *"
 
   workflow_dispatch:
     inputs:
