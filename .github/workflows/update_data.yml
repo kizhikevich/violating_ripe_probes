@@ -2,19 +2,15 @@ name: Update RIPE Atlas data and deploy checker
 
 on:
   schedule:
+    # Run once daily, after all three previous-day slots are complete.
     - cron: "0 2 * * *"
 
   workflow_dispatch:
     inputs:
-      slot:
-        description: "Snapshot slot"
-        required: true
-        default: "18"
-        type: choice
-        options:
-          - "06"
-          - "12"
-          - "18"
+      date:
+        description: "Historical UTC date (YYYY-MM-DD); blank means yesterday"
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -45,27 +41,17 @@ jobs:
         working-directory: interactive_checker
         run: pip install -r requirements.txt
 
-      - name: Determine snapshot slot
-        id: slot
-        shell: bash
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            SLOT="${{ inputs.slot }}"
-          else
-            case "${{ github.event.schedule }}" in
-              "0 6 * * *") SLOT="06" ;;
-              "0 12 * * *") SLOT="12" ;;
-              "0 18 * * *") SLOT="18" ;;
-              *) echo "Unknown schedule"; exit 1 ;;
-            esac
-          fi
-          echo "slot=$SLOT" >> "$GITHUB_OUTPUT"
-
-      - name: Fetch and process RIPE Atlas snapshot
+      - name: Fetch yesterday's 06:00, 12:00 and 18:00 UTC measurements
         working-directory: interactive_checker
+        env:
+          REQUESTED_DATE: ${{ inputs.date }}
         run: |
+          args=()
+          if [ -n "$REQUESTED_DATE" ]; then
+            args+=(--date "$REQUESTED_DATE")
+          fi
           python fetch_data.py \
-            --slot "${{ steps.slot.outputs.slot }}" \
+            "${args[@]}" \
             --root-locations root_locations.csv \
             --site-dir site
 
@@ -80,7 +66,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "No generated data changes"
           else
-            git commit -m "Update RIPE Atlas snapshot ${{ steps.slot.outputs.slot }} UTC"
+            git commit -m "Update historical RIPE Atlas daily data"
             git push
           fi
 
