@@ -5,7 +5,7 @@ import bz2
 import json
 import re
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import numpy as np
@@ -17,10 +17,17 @@ from urllib3.util.retry import Retry
 
 API_URL = "https://atlas.ripe.net/api/v2/measurements"
 META_LATEST_URL = "https://ftp.ripe.net/ripe/atlas/probes/archive/meta-latest"
+META_ARCHIVE_URL = (
+    "https://ftp.ripe.net/ripe/atlas/probes/archive/"
+    "{year}/{month:02d}/{datestr}.json.bz2"
+)
 
 SOI_SPEED_KM_S = 199_862.638
 EARTH_RADIUS_KM = 6371.0
 SCHEDULED_SLOTS = ("06", "12", "18")
+WINDOW_MINUTES = 5
+# Exclude this mislocated instance even if it remains in root_locations.csv.
+EXCLUDED_HOSTNAMES = frozenset({"s1.ccp"})
 
 
 # hostname.bind measurement IDs, IPv4 only.
@@ -139,165 +146,159 @@ def extract_hostname_from_full_result(result):
     return None
 
 
-def fetch_latest_measurements(session, letter, proto=4, freshness=900):
-    """
-    Fetch one compact latest-result snapshot for one root letter.
+def slot_window(target_day, slot, window_minutes=WINDOW_MINUTES):
+    """Return the UTC target instant and its accepted [start, stop) window."""
+    target = datetime.combine(target_day, datetime.min.time(), timezone.utc)
+    target += timedelta(hours=int(slot))
+    delta = timedelta(minutes=window_minutes)
+    return target, target - delta, target + delta
 
-    This deliberately uses the same compact /latest/ request shape as the
-    original checker code: only RTT and hostname.bind response are requested.
+
+def fetch_historical_slot(session, letter, target_day, slot, window_minutes=5):
+    """Fetch historical hostname.bind DNS results near a fixed UTC instant.
+
+    One result per probe/root/slot is selected: the valid observation with
+    the timestamp CLOSEST to the scheduled instant, not the lowest RTT.
+    Ties use the earlier timestamp, then the lower RTT. Missing windows
+    remain missing; there is no fallback to /latest/ or to another time.
     """
     measurement_id = measurements[letter]
-    if proto == 6:
-        measurement_id += 1000
-
-    url = f"{API_URL}/{measurement_id}/latest/"
+    target, start, stop = slot_window(target_day, slot, window_minutes)
     params = {
-        "fields": "responses.0.response_time,responses.0.abuf.answers.0.data.0",
-        "freshness": freshness,
-        "use_keys": "true",
+        "start": start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "stop": stop.strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
+    url = f"{API_URL}/{measurement_id}/results/"
+    print(f"Fetching {letter.upper()} root ({measurement_id}), "
+          f"{target_day} {slot}:00 UTC +/-{window_minutes}m...", flush=True)
 
-    print(f"Fetching latest {letter.upper()} root ({measurement_id})...")
-
-    response = session.get(url, params=params, timeout=(20, 120))
-    response.raise_for_status()
-    results = response.json()
-
-    rows = []
-    stats = Counter()
-
-    # Preferred compact shape when use_keys=true:
-    #   {"1234": [[12.3, "hostname"]], ...}
-    if isinstance(results, dict):
-        for probe_id, response_list in results.items():
-            stats["returned"] += 1
-
-            if not response_list:
-                stats["empty"] += 1
-                continue
-
-            first = response_list[0]
-
-            if not isinstance(first, (list, tuple)) or len(first) < 2:
-                stats["unexpected_shape"] += 1
-                continue
-
-            rtt, hostname = first[0], first[1]
-            row = _build_latest_row(
-                probe_id=probe_id,
-                letter=letter,
-                measurement_id=measurement_id,
-                rtt=rtt,
-                hostname=hostname,
-                stats=stats,
-            )
-            if row is not None:
-                rows.append(row)
-
-    # Fallback if RIPE returns ordinary result objects instead.
-    elif isinstance(results, list):
-        for obj in results:
-            stats["returned"] += 1
-
-            if not isinstance(obj, dict):
-                stats["unexpected_shape"] += 1
-                continue
-
-            probe_id = obj.get("prb_id")
-            dns_result = obj.get("result")
-
-            if probe_id is None or not isinstance(dns_result, dict):
-                stats["unexpected_shape"] += 1
-                continue
-
-            rtt = dns_result.get("rt")
-            hostname = extract_hostname_from_full_result(dns_result)
-
-            row = _build_latest_row(
-                probe_id=probe_id,
-                letter=letter,
-                measurement_id=measurement_id,
-                rtt=rtt,
-                hostname=hostname,
-                stats=stats,
-            )
-            if row is not None:
-                rows.append(row)
-
-    else:
-        raise RuntimeError(
-            f"Unexpected /latest/ response type for {letter.upper()}: "
-            f"{type(results).__name__}"
-        )
-
-    print(
-        f"  {letter.upper()}: {stats['returned']:,} returned, "
-        f"{stats['usable']:,} usable, "
-        f"{stats['unparsed_hostname']:,} unparsed hostnames"
-    )
-
-    return rows, stats
-
-
-def _build_latest_row(probe_id, letter, measurement_id, rtt, hostname, stats):
-    if rtt is None:
-        stats["missing_rtt"] += 1
-        return None
-
+    response = session.get(url, params=params, timeout=(20, 180))
     try:
-        rtt = float(rtt)
-    except (TypeError, ValueError):
-        stats["invalid_rtt"] += 1
-        return None
+        response.raise_for_status()
+        results = response.json()
+    finally:
+        response.close()
 
-    if not np.isfinite(rtt) or rtt < 0:
-        stats["invalid_rtt"] += 1
-        return None
+    if not isinstance(results, list):
+        raise RuntimeError(f"Unexpected historical results format for {letter}: "
+                           f"{type(results).__name__}")
 
-    hostname = normalize_hostname(hostname)
-    if hostname is None:
-        stats["missing_hostname"] += 1
-        return None
+    stats = Counter()
+    selected = {}
+    for obj in results:
+        stats["returned"] += 1
+        if not isinstance(obj, dict):
+            stats["invalid_result"] += 1
+            continue
 
-    site = parse_site(letter, hostname)
-    if site is None:
-        stats["unparsed_hostname"] += 1
-        return None
+        try:
+            probe_id = int(obj["prb_id"])
+            timestamp = int(obj["timestamp"])
+        except (KeyError, TypeError, ValueError, OverflowError):
+            stats["missing_probe_or_timestamp"] += 1
+            continue
 
-    stats["usable"] += 1
+        # Defend against unexpected API boundary behavior. RIPE timestamps
+        # are Unix seconds (UTC); do not use the fetch time or local TZ.
+        if not (start.timestamp() <= timestamp < stop.timestamp()):
+            stats["outside_window"] += 1
+            continue
 
-    return {
-        "probe_id": int(probe_id),
-        "root_letter": letter,
-        "hostname": hostname,
-        "site": site,
-        "rtt_ms": rtt,
-        "measurement_id": measurement_id,
-    }
+        dns_result = obj.get("result")
+        if not isinstance(dns_result, dict):
+            stats["missing_dns_result"] += 1
+            continue
+        try:
+            rtt = float(dns_result["rt"])
+        except (KeyError, TypeError, ValueError, OverflowError):
+            stats["invalid_rtt"] += 1
+            continue
+        if not np.isfinite(rtt) or rtt < 0:
+            stats["invalid_rtt"] += 1
+            continue
+
+        hostname = extract_hostname_from_full_result(dns_result)
+        if hostname is None:
+            stats["missing_hostname"] += 1
+            continue
+        if hostname in EXCLUDED_HOSTNAMES:
+            stats["excluded_hostname"] += 1
+            continue
+        site = parse_site(letter, hostname)
+        if site is None:
+            stats["unparsed_hostname"] += 1
+            continue
+
+        stats["usable"] += 1
+        row = {
+            "probe_id": probe_id,
+            "root_letter": letter,
+            "hostname": hostname,
+            "site": site,
+            "rtt_ms": rtt,
+            "measurement_id": measurement_id,
+            "timestamp": timestamp,
+            "timestamp_utc": datetime.fromtimestamp(
+                timestamp, timezone.utc
+            ).isoformat(),
+            "date": target_day.isoformat(),
+            "slot_utc": slot,
+        }
+        # The scheduled time, not the lowest RTT in the window, decides
+        # which result represents this slot.
+        rank = (abs(timestamp - int(target.timestamp())), timestamp, rtt)
+        previous = selected.get(probe_id)
+        if previous is None or rank < previous[0]:
+            selected[probe_id] = (rank, row)
+
+    stats["selected_probes"] = len(selected)
+    print(f"  {stats['returned']:,} returned; {stats['usable']:,} usable; "
+          f"{stats['selected_probes']:,} selected; "
+          f"{stats['excluded_hostname']:,} excluded", flush=True)
+    return [item[1] for item in selected.values()], stats
 
 
-def fetch_probe_metadata(session):
-    print("Downloading latest probe metadata...")
-    response = session.get(META_LATEST_URL, timeout=(20, 120))
-    response.raise_for_status()
+def fetch_probe_metadata(session, target_day):
+    """Use the target day's archived probe locations when available.
 
-    decompressed = bz2.decompress(response.content)
-    meta_json = json.loads(decompressed)
+    If RIPE does not have that archive, fall back to the latest metadata.
+    """
+    datestr = target_day.strftime("%Y%m%d")
+    archive_url = META_ARCHIVE_URL.format(
+        year=target_day.year, month=target_day.month, datestr=datestr
+    )
+    meta_json = None
+    for url in (archive_url, META_LATEST_URL):
+        print(f"Fetching probe metadata: {url}", flush=True)
+        response = session.get(url, timeout=(20, 120))
+        try:
+            if response.status_code == 404:
+                print("  Archive unavailable; trying fallback.")
+                continue
+            response.raise_for_status()
+            try:
+                meta_json = json.loads(bz2.decompress(response.content))
+            except (OSError, json.JSONDecodeError) as exc:
+                print(f"  Metadata decode failed: {exc}")
+                continue
+            break
+        finally:
+            response.close()
+
+    if meta_json is None:
+        raise RuntimeError("Could not load probe metadata from archive or latest")
 
     probes = []
     for probe in meta_json.get("objects", []):
-        probes.append(
-            {
-                "probe_id": probe["id"],
-                "asn_v4": probe.get("asn_v4"),
-                "asn_v6": probe.get("asn_v6"),
-                "country": probe.get("country_code"),
-                "latitude": probe.get("latitude"),
-                "longitude": probe.get("longitude"),
-                "status": probe.get("status"),
-            }
-        )
-
+        probes.append({
+            "probe_id": probe["id"],
+            "asn_v4": probe.get("asn_v4"),
+            "asn_v6": probe.get("asn_v6"),
+            "country": probe.get("country_code"),
+            "latitude": probe.get("latitude"),
+            "longitude": probe.get("longitude"),
+            "status": probe.get("status"),
+        })
     df = pd.DataFrame(probes)
     print(f"Loaded {len(df):,} probe metadata records")
     return df
@@ -410,51 +411,13 @@ def add_soi_columns(df):
     return df
 
 
-def resolve_slot(now_utc, requested_slot):
-    if requested_slot is not None:
-        return requested_slot
-
-    # Scheduled GitHub jobs can start a little late. Treat any run after a
-    # scheduled time as belonging to the most recent slot that day.
-    if now_utc.hour >= 18:
-        return "18"
-    if now_utc.hour >= 12:
-        return "12"
-    if now_utc.hour >= 6:
-        return "06"
-
-    raise ValueError(
-        f"Current UTC hour is {now_utc.hour:02d}, before the first scheduled "
-        "slot. For a manual test, pass --slot 06, --slot 12, or --slot 18."
-    )
-
-
 def save_snapshot(df, output_dir, target_date, slot):
     snapshots_dir = output_dir / "snapshots"
     snapshots_dir.mkdir(parents=True, exist_ok=True)
-
     path = snapshots_dir / f"{target_date}_{slot}.parquet"
     df.to_parquet(path, index=False, compression="zstd")
     print(f"Wrote snapshot: {path}")
     return path
-
-
-def load_available_snapshots(output_dir, target_date):
-    snapshots_dir = output_dir / "snapshots"
-    frames = []
-    loaded_slots = []
-
-    for slot in SCHEDULED_SLOTS:
-        path = snapshots_dir / f"{target_date}_{slot}.parquet"
-        if path.exists():
-            frame = pd.read_parquet(path)
-            frames.append(frame)
-            loaded_slots.append(slot)
-
-    if not frames:
-        raise RuntimeError(f"No snapshots found for {target_date}")
-
-    return pd.concat(frames, ignore_index=True), loaded_slots
 
 
 def choose_daily_minima(snapshot_df):
@@ -577,6 +540,7 @@ def write_web_data(summary, observations, target_date, loaded_slots, site_dir):
             "root_ns": _json_value(getattr(row, "root_ns", None)),
             "hostname": _json_value(getattr(row, "hostname", None)),
             "slot": _json_value(getattr(row, "min_rtt_slot_utc", None)),
+            "measurement_timestamp_utc": _json_value(getattr(row, "timestamp_utc", None)),
             "rtt_ms": _json_value(getattr(row, "rtt_ms", None)),
             "distance_km": _json_value(getattr(row, "haversine_distance_km", None)),
             "max_feasible_km": _json_value(getattr(row, "furthest_possible_km", None)),
@@ -641,250 +605,141 @@ def write_web_data(summary, observations, target_date, loaded_slots, site_dir):
 def parse_args():
     parser = argparse.ArgumentParser(
         description=(
-            "Fetch one RIPE Atlas latest snapshot at 06/12/18 UTC, save it, "
-            "then recompute the day's minimum RTT per probe/root across all "
-            "scheduled snapshots currently available."
+            "Once per day, retrieve yesterday's RIPE Atlas hostname.bind "
+            "results closest to 06:00, 12:00 and 18:00 UTC."
         )
     )
-
-    parser.add_argument(
-        "--slot",
-        choices=SCHEDULED_SLOTS,
-        help=(
-            "UTC snapshot slot: 06, 12, or 18. If omitted, infer it from "
-            "the current UTC hour. Use this option for manual/local tests."
-        ),
-    )
-
     parser.add_argument(
         "--date",
-        help=(
-            "Date label YYYY-MM-DD. Normally omit this and use today's UTC "
-            "date. IMPORTANT: /latest/ always fetches current data; this "
-            "option is only for controlled local testing."
-        ),
+        help="Historical UTC date YYYY-MM-DD (default: yesterday UTC).",
     )
-
     parser.add_argument(
-        "--output-dir",
-        default="data",
-        help="Output directory. Default: data/",
-    )
-
-    parser.add_argument(
-        "--root-locations",
-        default="root_locations.csv",
-        help="Root instance CSV. Default: root_locations.csv",
-    )
-
-    parser.add_argument(
-        "--freshness",
+        "--window-minutes",
         type=int,
-        default=900,
-        help="Maximum result age in seconds for /latest/. Default: 900.",
+        default=WINDOW_MINUTES,
+        help="Accepted window on either side of each target (default: 5).",
     )
-
     parser.add_argument(
-        "--csv",
-        action="store_true",
-        help="Also write CSV copies of observations and summary.",
+        "--output-dir", default="data", help="Output directory (default: data/)."
     )
-
     parser.add_argument(
-        "--site-dir",
-        default="site",
-        help="Static GitHub Pages site directory. Default: site/",
+        "--root-locations", default="root_locations.csv",
+        help="Root instance CSV (default: root_locations.csv).",
     )
-
+    parser.add_argument(
+        "--site-dir", default="site",
+        help="Static GitHub Pages directory (default: site/).",
+    )
+    parser.add_argument(
+        "--csv", action="store_true", help="Also write CSV files."
+    )
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
-    now_utc = datetime.now(timezone.utc)
-    slot = resolve_slot(now_utc, args.slot)
+    if not 1 <= args.window_minutes <= 30:
+        raise ValueError("--window-minutes must be between 1 and 30")
 
-    if args.date:
-        target_date = datetime.strptime(args.date, "%Y-%m-%d").date()
-        if target_date != now_utc.date():
-            print(
-                "WARNING: --date only changes the file/date label. "
-                "/latest/ still returns current measurements."
-            )
-    else:
-        target_date = now_utc.date()
+    now_utc = datetime.now(timezone.utc)
+    target_day = (
+        date.fromisoformat(args.date)
+        if args.date else now_utc.date() - timedelta(days=1)
+    )
+    if target_day >= now_utc.date():
+        raise ValueError("Target date must be a completed UTC day (before today)")
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-
-    print()
     print("=" * 64)
-    print("RIPE Atlas SOI scheduled snapshot")
-    print("=" * 64)
-    print(f"UTC date:       {target_date}")
-    print(f"Scheduled slot: {slot}:00 UTC")
-    print(f"Fetched at:     {now_utc.isoformat()}")
-    print()
+    print("RIPE Atlas SOI historical daily collection")
+    print(f"Target date: {target_day} (UTC)")
+    print(f"Slots: {', '.join(SCHEDULED_SLOTS)} UTC")
+    print(f"Window: +/-{args.window_minutes} minutes")
+    print(f"Collector ran: {now_utc.isoformat()}")
+    print("=" * 64, flush=True)
 
     session = make_session()
-
-    # 1. Fetch a compact latest snapshot for all 13 root letters.
-    all_rows = []
+    frames = []
     stats_by_letter = {}
+    for slot in SCHEDULED_SLOTS:
+        rows_for_slot = []
+        for letter in measurements:
+            rows, stats = fetch_historical_slot(
+                session, letter, target_day, slot, args.window_minutes
+            )
+            rows_for_slot.extend(rows)
+            stats_by_letter[(slot, letter)] = stats
+        if rows_for_slot:
+            snapshot = pd.DataFrame(rows_for_slot)
+            if snapshot.duplicated(["probe_id", "root_letter"]).any():
+                raise RuntimeError(f"Duplicate probe/root rows in {slot} slot")
+            snapshot["snapshot_fetched_at_utc"] = now_utc.isoformat()
+            frames.append(snapshot)
+            save_snapshot(snapshot, output_dir, target_day, slot)
+        else:
+            # Remove a previous run's stale snapshot for this slot so that
+            # backfills never leave misleading artifacts behind.
+            old_path = output_dir / "snapshots" / f"{target_day}_{slot}.parquet"
+            if old_path.exists():
+                old_path.unlink()
+            print(f"WARNING: no observations for {slot}:00 UTC; "
+                  "slot will be absent from daily data")
 
-    for letter in measurements:
-        rows, stats = fetch_latest_measurements(
-            session=session,
-            letter=letter,
-            proto=4,
-            freshness=args.freshness,
-        )
-        all_rows.extend(rows)
-        stats_by_letter[letter] = stats
+    if not frames:
+        raise RuntimeError("No valid observations in any of the three windows")
 
-    snapshot = pd.DataFrame(all_rows)
-    if snapshot.empty:
-        raise RuntimeError("No usable RIPE Atlas latest results were returned.")
+    # Do not read old snapshot files. A rerun must replace previously
+    # mis-timed data rather than accidentally merging it back in.
+    all_snapshots = pd.concat(frames, ignore_index=True)
+    loaded_slots = sorted(all_snapshots["slot_utc"].unique().tolist())
+    minima = choose_daily_minima(all_snapshots)
+    print(f"Daily minima: {len(minima):,} probe/root pairs "
+          f"across slots {loaded_slots}")
 
-    if snapshot.duplicated(["probe_id", "root_letter"]).any():
-        raise RuntimeError(
-            "Unexpected duplicate probe/root rows within one latest snapshot."
-        )
-
-    snapshot["date"] = str(target_date)
-    snapshot["slot_utc"] = slot
-    snapshot["snapshot_fetched_at_utc"] = now_utc.isoformat()
-
-    print()
-    print(
-        f"Current snapshot: {len(snapshot):,} probe/root rows for "
-        f"{snapshot['probe_id'].nunique():,} probes"
-    )
-
-    save_snapshot(snapshot, output_dir, target_date, slot)
-
-    # 2. Combine whichever of today's 06/12/18 snapshots exist and select
-    #    the minimum RTT for each probe x root letter.
-    daily_snapshots, loaded_slots = load_available_snapshots(
-        output_dir,
-        target_date,
-    )
-
-    minima = choose_daily_minima(daily_snapshots)
-
-    print(
-        f"Daily minimum now uses slots {loaded_slots}: "
-        f"{len(minima):,} probe/root rows"
-    )
-
-    # 3. Enrich the selected minimum-RTT rows only. This is much smaller than
-    #    enriching all raw/latest responses repeatedly.
-    meta_df = fetch_probe_metadata(session)
+    meta_df = fetch_probe_metadata(session, target_day)
     observations = minima.merge(
-        meta_df,
-        on="probe_id",
-        how="left",
-        validate="many_to_one",
+        meta_df, on="probe_id", how="left", validate="many_to_one"
     )
-
     observations["hostname_key"] = observations["hostname"].map(normalize_hostname)
-
     root_locations = load_root_locations(args.root_locations)
     observations = observations.merge(
-        root_locations,
-        on="hostname_key",
-        how="left",
-        validate="many_to_one",
+        root_locations, on="hostname_key", how="left", validate="many_to_one"
     )
+    print("Missing probe coordinates:",
+          int((observations["latitude"].isna() |
+               observations["longitude"].isna()).sum()))
+    print("Missing root coordinates:",
+          int((observations["dns_lat"].isna() |
+               observations["dns_lon"].isna()).sum()))
 
-    missing_probe_coords = (
-        observations["latitude"].isna() | observations["longitude"].isna()
-    ).sum()
-    missing_root_coords = (
-        observations["dns_lat"].isna() | observations["dns_lon"].isna()
-    ).sum()
-
-    print(f"Rows missing probe coordinates: {missing_probe_coords:,}")
-    print(f"Rows missing root coordinates:  {missing_root_coords:,}")
-
-    # 4. Precompute both buffer choices and probe-level one/two-letter rules.
     observations = add_soi_columns(observations)
-    summary = make_probe_summary(observations, target_date, loaded_slots)
+    summary = make_probe_summary(observations, target_day, loaded_slots)
 
-    # 5. Save current daily aggregate. The 12:00 run overwrites the 06:00
-    #    aggregate with min(06,12); the 18:00 run overwrites it with
-    #    min(06,12,18). The individual snapshots remain saved separately.
     observations_dir = output_dir / "observations"
     summary_dir = output_dir / "summary"
     observations_dir.mkdir(parents=True, exist_ok=True)
     summary_dir.mkdir(parents=True, exist_ok=True)
-
-    observations_path = observations_dir / f"{target_date}.parquet"
-    summary_path = summary_dir / f"{target_date}.parquet"
-
-    observations.to_parquet(
-        observations_path,
-        index=False,
-        compression="zstd",
-    )
-    summary.to_parquet(
-        summary_path,
-        index=False,
-        compression="zstd",
-    )
-
-    print()
+    observations_path = observations_dir / f"{target_day}.parquet"
+    summary_path = summary_dir / f"{target_day}.parquet"
+    observations.to_parquet(observations_path, index=False, compression="zstd")
+    summary.to_parquet(summary_path, index=False, compression="zstd")
     print(f"Wrote observations: {observations_path}")
-    print(f"Wrote summary:      {summary_path}")
+    print(f"Wrote summary: {summary_path}")
 
-    # 6. Export compact JSON for the static GitHub Pages checker.
-    write_web_data(
-        summary=summary,
-        observations=observations,
-        target_date=target_date,
-        loaded_slots=loaded_slots,
-        site_dir=args.site_dir,
-    )
-
+    write_web_data(summary, observations, target_day, loaded_slots, args.site_dir)
     if args.csv:
-        observations.to_csv(
-            observations_dir / f"{target_date}.csv",
-            index=False,
-        )
-        summary.to_csv(
-            summary_dir / f"{target_date}.csv",
-            index=False,
-        )
+        observations.to_csv(observations_dir / f"{target_day}.csv", index=False)
+        summary.to_csv(summary_dir / f"{target_day}.csv", index=False)
 
-    print()
     print("Violation summary:")
-    print(
-        f"  0 km, >=1 letter:   "
-        f"{summary['violates_0km_1letter'].sum():,} probes"
-    )
-    print(
-        f"  0 km, >=2 letters:  "
-        f"{summary['violates_0km_2letters'].sum():,} probes"
-    )
-    print(
-        f"  100 km, >=1 letter: "
-        f"{summary['violates_100km_1letter'].sum():,} probes"
-    )
-    print(
-        f"  100 km, >=2 letters:"
-        f" {summary['violates_100km_2letters'].sum():,} probes"
-    )
-
-    print()
-    print("Hostname parsing summary:")
-    for letter in measurements:
-        stats = stats_by_letter[letter]
-        print(
-            f"  {letter.upper()}: {stats['usable']:,} usable; "
-            f"{stats['unparsed_hostname']:,} unparsed"
-        )
-
-    print()
+    for label, column in (
+        ("0 km, >=1 letter", "violates_0km_1letter"),
+        ("0 km, >=2 letters", "violates_0km_2letters"),
+        ("100 km, >=1 letter", "violates_100km_1letter"),
+        ("100 km, >=2 letters", "violates_100km_2letters"),
+    ):
+        print(f"  {label}: {int(summary[column].sum()):,} probes")
     print("Done.")
 
 
